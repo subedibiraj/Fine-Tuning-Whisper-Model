@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 import torch
+import numpy as np
 
 # import the relevant libraries for logging in
 from huggingface_hub import HfFolder
@@ -66,18 +67,35 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 def compute_metrics(pred):
     """
     Define evaluation metrics. We will use the Word Error Rate (WER) metric.
-    For more information, check:
     """
     pred_ids = pred.predictions
     label_ids = pred.label_ids
 
-    # replace -100 with the pad_token_id
+    # Ensure pred_ids is correctly shaped for decoding
+    if isinstance(pred_ids, tuple):
+        pred_ids = pred_ids[0]
+
+    # Convert logits to token IDs
+    pred_ids = np.argmax(pred_ids, axis=-1)
+
+    # Convert pred_ids from numpy array to list of lists
+    pred_ids = pred_ids.tolist()
+
+    # Debugging: Print the structure after conversion
+    print("Converted Pred IDs:", pred_ids)
+
+    # Replace -100 with the pad_token_id in label_ids
     label_ids[label_ids == -100] = tokenizer.pad_token_id
 
-    # we do not want to group tokens when computing the metrics
+    # Decode the predictions and labels to strings
     pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
+    # Debugging: Print the decoded strings
+    print("Predicted Strings:", pred_str)
+    print("Label Strings:", label_str)
+
+    # Compute the Word Error Rate (WER)
     wer = 100 * metric.compute(predictions=pred_str, references=label_str)
 
     return {"wer": wer}
@@ -178,11 +196,11 @@ if __name__ == "__main__":
         gradient_accumulation_steps=1,       # No gradient accumulation in this setup
         learning_rate=1e-5,                  # Updated learning rate
         warmup_steps=100,                    # Warmup steps for scheduler
-        max_steps=2500,                      # Total training steps
+        max_steps=20,                      # Total training steps
         logging_steps=25,                    # Log every 25 steps
         save_steps=1000,                     # Save model every 1000 steps
         evaluation_strategy="steps",         # Evaluate every step
-        eval_steps=1000,                     # Evaluate every 1000 steps
+        eval_steps=1,                     # Evaluate every 1000 steps
         report_to=["tensorboard"],           # Report to TensorBoard
         fp16=True,                           # Mixed precision training
         load_best_model_at_end=True,         # Load the best model at the end of training
